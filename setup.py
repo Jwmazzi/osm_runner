@@ -7,7 +7,7 @@ setup(
   author = 'Jeffrey Scarmazzi',
   author_email = 'jscarmazzi@esri.com',
   url = 'https://github.com/Jwmazzi/osm_runner',
-  download_url = 'https://github.com/jwmwzzi/osm_runner/archive/0.0.1.tar.gz', # I'll explain this in a second
+  download_url = 'https://github.com/jwmazzi/osm_runner/archive/0.0.1.tar.gz', 
   keywords = ['ArcGIS API for Python', 'OpenStreetMap'],
   classifiers = [],
 )
