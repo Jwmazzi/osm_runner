@@ -3,5 +3,4 @@ OSM Runner
 
 A simple ORM that leverages the SpatialDataFrames of the ArcGIS API for Python
 to integrate OSM data with the ArcGIS platform. This script was initially
-developed for the State of the Data_. 
-.. _: https://github.com/ngageoint/state-of-the-data
+developed for the State of the Data_: https://github.com/ngageoint/state-of-the-data
