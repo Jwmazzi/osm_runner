@@ -1,240 +1,234 @@
-from .utils import Format, Output, Filters, Elements
-
 from arcgis.geometry import Point, Polyline, Polygon
-from arcgis.features import SpatialDataFrame
+from arcgis.features import GeoAccessor
 
 from datetime import date
+import pandas as pd
 import requests
 
 
-def gen_osm_sdf(geom_type, bound_box, osm_tag=None, time_one=None, time_two=None, present=False):
+class Runner:
 
-    geom_type = geom_type.lower()
+    def __init__(self):
 
-    if geom_type not in ['point', 'line', 'polygon']:
-        raise Exception('Geometry Type "{0}" Does Not Match Input Options: point|line|polygon'.format(geom_type))
+        # OSM Element Types
+        self.elements = {"point": "node", "line": "way", "polygon": "way"}
 
-    else:
-        osm_element = Elements.get(geom_type)
+        # Period: http://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL
+        # Section 5 / 5.1
+        self.output = '(._;>;);out geom qt;'
 
-        query = get_query(osm_element, bound_box, osm_tag, time_one, time_two, present)
+        # Format: http://wiki.openstreetmap.org/wiki/Overpass_API/Language_Guide
+        # Section 13 / 13.1
+        self.format = '[out:json]'
 
-        osm_response = get_osm_elements(query)
+    def gen_osm_df(self, geom_type, bound_box, osm_tag=None, time_one=None, time_two=None, present=False):
 
-        if geom_type == 'point':
-            base_sdf = build_node_sdf(osm_response)
+        geom_type = geom_type.lower()
+
+        if geom_type not in self.elements.keys():
+            raise Exception(f'Geometry Type "{geom_type}" Does Not Match Input Options: point|line|polygon')
 
         else:
-            base_sdf = build_ways_sdf(osm_response, geom_type)
+            osm_element = self.elements.get(geom_type)
 
-        sdf = fields_cleaner(base_sdf)
+            query = self.get_query(osm_element, bound_box, osm_tag, time_one, time_two, present)
 
-        return sdf
+            osm_response = self.get_osm_elements(query)
 
+            if geom_type == 'point':
+                base_df = self.build_node_sdf(osm_response)
 
-def get_query(osm_el, b_box, o_tag, t1, t2, present_flag):
+            else:
+                base_df = self.build_ways_sdf(osm_response, geom_type)
 
-    if osm_el.lower() not in ['node', 'way']:
-        raise Exception('OSM Element {0} Does Not Match Configuration Options: node|way'.format(osm_el))
+            df = self.fields_cleaner(base_df)
 
-    head = get_query_head(Format, t1, t2, present_flag)
+            return df
 
-    if o_tag:
+    def get_query(self, osm_el, b_box, o_tag, t1, t2, present_flag):
 
-        o_tag = o_tag.lower()
-        filters = Filters.get(o_tag)
+        if osm_el.lower() not in self.elements.values():
+            raise Exception(f'OSM Element {osm_el} Does Not Match Configuration Options: node|way')
 
-        if filters:
+        head = self.get_query_head(self.format, t1, t2, present_flag)
+
+        if isinstance(o_tag, dict):
+
+            o_tag, filters = next(iter(o_tag.items()))
+
             filters = [f.lower() for f in filters]
             f = '|'.join(filters)
             f_clause = '["' + o_tag + '"~"' + f + '"]'
-            return ';'.join([
-                head,
-                ''.join([str(osm_el), f_clause, str(b_box)]),
-                Output
-            ])
+            return ';'.join([head, ''.join([str(osm_el), f_clause, str(b_box)]), self.output])
             # E.G. [out:json];way["highway"~"primary|residential"](bounding_box);(._;>;);out geom qt;
 
-        else:
+        elif isinstance(o_tag, str):
+
             f_clause = '["' + o_tag + '"]'
-            return ';'.join([
-                head,
-                ''.join([str(osm_el), f_clause, str(b_box)]),
-                Output
-            ])
+            return ';'.join([head, ''.join([str(osm_el), f_clause, str(b_box)]), self.output])
             # E.G. [out:json];way["highway"](bounding_box);(._;>;);out geom qt;
 
-    else:
-        return ';'.join([
-            head,
-            ''.join([str(osm_el), str(b_box)]),
-            Output
-        ])
-        # E.G. [out:json];way(bounding_box);(._;>;);out geom qt;
+        else:
+            return ';'.join([head, ''.join([str(osm_el), str(b_box)]), self.output])
+            # E.G. [out:json];way(bounding_box);(._;>;);out geom qt;
 
+    @staticmethod
+    def get_query_head(f, t_1, t_2, p_flag):
 
-def get_query_head(f, t_1, t_2, p_flag):
-
-    if not t_1 and not t_2:
-        return f
-
-    else:
-        if p_flag:
-            if t_1 and not t_2:
-                d = '[diff: "' + t_1 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
-
-            elif t_2 and not t_1:
-                d = '[diff: "' + t_2 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
-
-            else:
-                raise Exception('Invalid Parameters - Please Only Specify One Time Parameter When Using Present')
+        if not t_1 and not t_2:
+            return f
 
         else:
-            if t_1 and not t_2:
-                d = '[date: "' + t_1 + '"]'
+            if p_flag:
+                if t_1 and not t_2:
+                    d = '[diff: "' + t_1 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
 
-            elif t_2 and not t_1:
-                d = '[date: "' + t_2 + '"]'
+                elif t_2 and not t_1:
+                    d = '[diff: "' + t_2 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
+
+                else:
+                    raise Exception('Invalid Parameters - Please Only Specify One Time Parameter When Using Present')
 
             else:
-                d = '[diff: "' + t_1 + '", "' + t_2 + '"]'
+                if t_1 and not t_2:
+                    d = '[date: "' + t_1 + '"]'
 
-    return ''.join([f, d])
+                elif t_2 and not t_1:
+                    d = '[date: "' + t_2 + '"]'
 
+                else:
+                    d = '[diff: "' + t_1 + '", "' + t_2 + '"]'
 
-def get_osm_elements(osm_query):
+        return ''.join([f, d])
 
-    osm_api = 'https://overpass-api.de/api/interpreter'
+    @staticmethod
+    def get_osm_elements(osm_query):
 
-    r = requests.get(osm_api, data=osm_query)
+        osm_api = 'https://overpass-api.de/api/interpreter'
 
-    if r.status_code == 200:
+        r = requests.get(osm_api, data=osm_query)
 
-        if len(r.json()['elements']) == 0:
+        if r.status_code == 200:
 
+            if len(r.json()['elements']) == 0:
+
+                try:
+                    raise Exception(f'OSM Returned Zero Results with Remark: {r.json()["remark"]}')
+
+                except KeyError:
+                    raise Exception(f'OSM Returned Zero Results for Query: {osm_query}')
+
+            else:
+                return r.json()['elements']
+
+        elif r.status_code == 429:
+            raise Exception('OSM Request Limit Reached. Please Try Again in a Few Minutes . . .')
+
+        else:
+            raise Exception(f'OSM Returned Status Code: {r.status_code}')
+
+    @staticmethod
+    def build_node_sdf(n_list):
+
+        # List of Node Dictionaries for Data Frame Creation
+        data_list = []
+
+        for node in n_list:
+
+            # Set Initial Values
+            node_data = {
+                'osm_id': str(node['id']),
+                'geom': Point({
+                    "x": node['lon'],
+                    "y": node['lat'],
+                    "spatialReference": {"wkid": 4326}
+                })
+            }
+
+            # Push All Tag Values into Node Data
+            for k, v in node['tags'].items():
+                node_data.update({k: v})
+
+            data_list.append(node_data)
+
+        try:
+            df = pd.DataFrame(data_list)
+            df.spatial.set_geometry('geom')
+
+            return df
+
+        except Exception as e:
+            raise Exception(f'Building Spatial Data Frame Failed: {e}')
+
+    @staticmethod
+    def build_ways_sdf(o_response, g_type):
+
+        # Extract Relevant Way Elements from OSM Response
+        if g_type == 'polygon':
+            ways = [e for e in o_response if e['type'] == 'way' and e['nodes'][0] == e['nodes'][-1]]
+        else:
+            ways = [e for e in o_response if e['type'] == 'way' and e['nodes'][0] != e['nodes'][-1]]
+
+        # List of Node Dictionaries for Data Frame Creation
+        data_list = []
+
+        for way in ways:
             try:
-                raise Exception('OSM Returned Zero Results with Remark: {}'.format(r.json()['remark']))
 
-            except KeyError:
-                raise Exception('OSM Returned Zero Results for Query: {}'.format(osm_query))
+                # Collect Geometry
+                coords = [[e['lon'], e['lat']] for e in way.get('geometry')]
+                if g_type == 'polygon':
+                    poly = Polygon({"rings":  [coords], "spatialReference": {"wkid": 4326}})
+                else:
+                    poly = Polyline({"paths": [coords], "spatialReference": {"wkid": 4326}})
+
+                # Set Initial Values
+                way_data = {
+                    'osm_id': str(way['id']),
+                    'geom': poly
+                }
+
+                # Push All Tag Values into Node Data
+                for k, v in way['tags'].items():
+                    way_data.update({k: v})
+
+                data_list.append(way_data)
+
+            except Exception as e:
+                print(f'Way ID {way["id"]} Raised Exception: {e}')
+
+        try:
+            df = pd.DataFrame(data_list)
+            df.spatial.set_geometry('geom')
+
+            return df
+
+        except Exception as e:
+            raise Exception(f'Building Spatial Data Frame Failed: {e}')
+
+    @staticmethod
+    def fields_cleaner(b_df):
+
+        # Set Cutoff & Collect Field List
+        cutoff = int(len(b_df) * .99)
+        f_list = list(b_df)
+
+        # Flag Fields Where >= 99% of Data is Null
+        fields = []
+        for f in f_list:
+            try:
+                if b_df[f].dtype == 'object' and f != 'SHAPE':
+                    null_count = b_df[f].value_counts().get('Null', 0)
+                    if null_count >= cutoff:
+                        fields.append(f)
+            except:
+                print(f'Cannot Determine Null Count for Field {str(f)}')
+                continue
+
+        # Drop Flagged Fields & Return
+        if fields:
+            b_df.drop(fields, axis=1, inplace=True)
+            return b_df
 
         else:
-            return r.json()['elements']
-
-    elif r.status_code == 429:
-        raise Exception('OSM Request Limit Reached. Please Try Again in a Few Minutes . . .')
-
-    else:
-        raise Exception('OSM Returned Status Code: {0}'.format(r.status_code))
-
-
-def build_node_sdf(n_list):
-
-    # Dictionary For Geometries & IDs
-    geo_dict = {"geo": []}
-    val_dict = {'osm_id': []}
-
-    # Dictionary For Incoming Tags
-    for n in n_list:
-        n_tags = n['tags'].keys()
-        for tag in n_tags:
-            if tag not in val_dict.keys():
-                val_dict[tag] = []
-
-    # Build Lists
-    for n in n_list:
-        try:
-            # Populate Tags
-            for tag in [key for key in val_dict.keys() if key != 'osm_id']:
-                val_dict[tag].append(str(n['tags'].get(tag, 'Null')))
-
-            # Populate Geometries & IDs
-            point = Point({
-                "x": n['lon'],
-                "y": n['lat'],
-                "spatialReference": {"wkid": 4326}
-            })
-            geo_dict['geo'].append(point)
-            val_dict['osm_id'].append(str(n['id']))
-
-        except Exception as ex:
-            print('Node ID {0} Raised Exception: {1}'.format(n['id'], str(ex)))
-
-    try:
-        return SpatialDataFrame(val_dict, geometry=geo_dict['geo'])
-
-    except TypeError:
-            raise Exception('Ensure ArcPy is Included in Python Interpreter')
-
-
-def build_ways_sdf(o_response, g_type):
-
-    # Extract Relevant Way Elements from OSM Response
-    if g_type == 'polygon':
-        ways = [e for e in o_response if e['type'] == 'way' and e['nodes'][0] == e['nodes'][-1]]
-    else:
-        ways = [e for e in o_response if e['type'] == 'way' and e['nodes'][0] != e['nodes'][-1]]
-
-    # Dictionary For Geometries & IDs
-    geo_dict = {'geo': []}
-    val_dict = {'osm_id': []}
-
-    # Dictionary For Incoming Tags
-    for w in ways:
-        w_tags = w['tags'].keys()
-        for tag in w_tags:
-            if tag not in val_dict.keys():
-                val_dict[tag] = []
-
-    # Build Lists
-    for w in ways:
-        try:
-            # Populate Tags
-            for tag in [key for key in val_dict.keys() if key != 'osm_id']:
-                val_dict[tag].append(str(w['tags'].get(tag, 'Null')))
-
-            # Populate Geometries & IDs
-            coords = [[e['lon'], e['lat']] for e in w.get('geometry')]
-            if g_type == 'polygon':
-                poly = Polygon({"rings":  [coords], "spatialReference": {"wkid": 4326}})
-            else:
-                poly = Polyline({"paths": [coords], "spatialReference": {"wkid": 4326}})
-
-            geo_dict['geo'].append(poly)
-            val_dict['osm_id'].append(str(w['id']))
-
-        except Exception as ex:
-            print('Way ID {0} Raised Exception: {1}'.format(w['id'], str(ex)))
-
-    try:
-        return SpatialDataFrame(val_dict, geometry=geo_dict['geo'])
-
-    except TypeError:
-        raise Exception('Ensure ArcPy is Included in Python Interpreter')
-
-
-def fields_cleaner(b_sdf):
-
-    # Set Cutoff & Collect Field List
-    cutoff = int(len(b_sdf) * .99)
-    f_list = list(b_sdf)
-
-    # Flag Fields Where >= 99% of Data is Null
-    fields = []
-    for f in f_list:
-        try:
-            if b_sdf[f].dtype == 'object' and f != 'SHAPE':
-                null_count = b_sdf[f].value_counts().get('Null', 0)
-                if null_count >= cutoff:
-                    fields.append(f)
-        except:
-            print('Cannot Determine Null Count for Field {0}'.format(str(f)))
-            continue
-
-    # Drop Flagged Fields & Return
-    if fields:
-        b_sdf.drop(fields, axis=1, inplace=True)
-        return b_sdf
-
-    else:
-        return b_sdf
+            return b_df
