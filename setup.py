@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='osm_runner',
     packages=['osm_runner'],
-    version='0.0.2',
+    version='0.0.3',
     description='A simple ORM that leverages the GeoAccessor of the ArcGIS API for Python to integrate OSM data with the ArcGIS platform.',
     long_description='A simple ORM that leverages the GeoAccessor of the ArcGIS API for Python to integrate OSM data with the ArcGIS platform.',
     author='Jeffrey Scarmazzi',
