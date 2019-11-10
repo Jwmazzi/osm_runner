@@ -6,7 +6,7 @@ Home-page: https://github.com/Jwmazzi/osm_runner
 Author: Jeffrey Scarmazzi
 Author-email: jscarmazzi@esri.com
 License: UNKNOWN
-Download-URL: https://github.com/jwmazzi/osm_runner/archive/0.0.2.tar.gz
+Download-URL: https://github.com/jwmazzi/osm_runner/archive/0.0.3.tar.gz
 Description: A simple ORM that leverages the GeoAccessor of the ArcGIS API for Python to integrate OSM data with the ArcGIS platform.
 Keywords: ArcGIS API for Python,OpenStreetMap
 Platform: UNKNOWN

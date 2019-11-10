@@ -9,7 +9,7 @@ setup(
     author='Jeffrey Scarmazzi',
     author_email='jscarmazzi@esri.com',
     url='https://github.com/Jwmazzi/osm_runner',
-    download_url='https://github.com/jwmazzi/osm_runner/archive/0.0.2.tar.gz',
+    download_url='https://github.com/jwmazzi/osm_runner/archive/0.0.3.tar.gz',
     keywords=['ArcGIS API for Python', 'OpenStreetMap'],
     classifiers=[],
     install_requires=['requests', 'pandas', 'arcgis']
