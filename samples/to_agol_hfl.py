@@ -18,17 +18,13 @@ if __name__ == "__main__":
     # Get Instance of OSM Runner
     runner = Runner()
 
-    # # Fetch Surveillance Cameras
-    # df = runner.gen_osm_df('point', bbox, 'man_made')
-
     # Fetch Surveillance Cameras
     df = runner.gen_osm_df('point', bbox, 'man_made')
 
-    # # Fetch Historic Buildings
-    # df = runner.gen_osm_df('line', bbox, 'historic')
+    # Connect to GIS
+    gis = GIS('***', '***', '***')
 
-    gis = GIS('https://dbsne.maps.arcgis.com', 'jscarmazzi_DBSNE', 'gis12345')
-
+    # Dump HFL to Enterprise
     df.spatial.to_featurelayer(f'OSM Cameras {round(time.time())}', gis=gis)
 
 
